@@ -33,7 +33,12 @@ pipeline {
             steps {
                 sh 'mvn package -DskipTests'
             }
-        }    
+        } 
+stage('Docker Build') {
+    steps {
+        sh 'docker build -t devops-pipeline:1.0 .'
+    }
+}   
     }
 
     post {
