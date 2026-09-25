@@ -8,6 +8,6 @@ public class AppTest {
 
     @Test
     void testMessage() {
-        assertEquals("DevOps Pipeline works!", App.message());
+        assertEquals("DevOps Pipeline works from feature-demo!", App.message());
     }
 }
