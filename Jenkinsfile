@@ -28,6 +28,24 @@ pipeline {
                 sh 'mvn test'
             }
         }
+        stage('SonarQube Analysis') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'sonarqube-token',
+                variable: 'SONAR_TOKEN'
+            )
+        ]) {
+            sh '''
+                mvn sonar:sonar \
+                  -Dsonar.projectKey=devops-pipeline \
+                  -Dsonar.projectName=devops-pipeline \
+                  -Dsonar.host.url=http://localhost:9000 \
+                  -Dsonar.token=$SONAR_TOKEN
+            '''
+        }
+    }
+} 
 
         stage('Package') {
             steps {
