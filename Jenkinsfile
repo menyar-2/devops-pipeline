@@ -1,7 +1,6 @@
 pipeline {
     agent any
 
-
     stages {
 
         stage('Checkout') {
@@ -28,43 +27,45 @@ pipeline {
                 sh 'mvn test'
             }
         }
+
         stage('SonarQube Analysis') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'sonarqube-token',
-                variable: 'SONAR_TOKEN'
-            )
-        ]) {
-            sh '''
-                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                  -Dsonar.projectKey=devops-pipeline \
-                  -Dsonar.projectName=devops-pipeline \
-                  -Dsonar.host.url=http://localhost:9000 \
-                  -Dsonar.token=$SONAR_TOKEN
-            '''
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'sonarqube-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                          -Dsonar.projectKey=devops-pipeline \
+                          -Dsonar.projectName=devops-pipeline \
+                          -Dsonar.host.url=http://localhost:9000 \
+                          -Dsonar.token=$SONAR_TOKEN
+                    '''
+                }
+            }
         }
-    }
-} 
 
         stage('Package') {
             steps {
                 sh 'mvn package -DskipTests'
             }
         }
-stage('Nexus Deploy') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'nexus-credentials',
-                usernameVariable: 'NEXUS_USER',
-                passwordVariable: 'NEXUS_PASSWORD'
-            )
-        ]) {
-            sh '''
-                mkdir -p $WORKSPACE/.m2
 
-                cat > $WORKSPACE/.m2/settings.xml <<EOF
+        stage('Nexus Deploy') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        mkdir -p "$WORKSPACE/.m2"
+
+                        cat > "$WORKSPACE/.m2/settings.xml" <<EOF
 <settings>
     <servers>
         <server>
@@ -76,43 +77,52 @@ stage('Nexus Deploy') {
 </settings>
 EOF
 
-                mvn deploy -DskipTests -s $WORKSPACE/.m2/settings.xml
-            '''
+                        mvn deploy -DskipTests -s "$WORKSPACE/.m2/settings.xml"
+                    '''
+                }
+            }
         }
-    }
-} 
-stage('Docker Build') {
-    steps {
-        sh 'docker build -t m221jft4043/devops-pipeline:1.0 .'
-    }
-}
-stage('Docker Push') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )
-        ]) {
-            sh '''
-                echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin
-                docker push m221jft4043/devops-pipeline:1.0
-            '''
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    docker build -t m221jft4043/devops-pipeline:1.0 .
+                '''
+            }
         }
-    }
-}   
+
+        stage('Docker Push') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login \
+                          -u "$DOCKER_USER" \
+                          --password-stdin
+
+                        docker push m221jft4043/devops-pipeline:1.0
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Compose Deploy') {
+            steps {
+                sh '''
+                    docker compose down || true
+                    docker compose pull
+                    docker compose up -d
+                    docker compose ps
+                '''
+            }
+        }
     }
 
-stage('Docker Compose Deploy') {
-    steps {
-        sh '''
-            docker compose down || true
-            docker compose up -d
-            docker compose ps
-        '''
-    }
-}
     post {
         success {
             echo 'PIPELINE SUCCESS'
