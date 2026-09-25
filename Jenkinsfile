@@ -54,7 +54,31 @@ pipeline {
         }
 stage('Nexus Deploy') {
     steps {
-        sh 'mvn deploy -DskipTests'
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'nexus-credentials',
+                usernameVariable: 'NEXUS_USER',
+                passwordVariable: 'NEXUS_PASSWORD'
+            )
+        ]) {
+            sh '''
+                mkdir -p $WORKSPACE/.m2
+
+                cat > $WORKSPACE/.m2/settings.xml <<EOF
+<settings>
+    <servers>
+        <server>
+            <id>deploymentRepo</id>
+            <username>${NEXUS_USER}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+</settings>
+EOF
+
+                mvn deploy -DskipTests -s $WORKSPACE/.m2/settings.xml
+            '''
+        }
     }
 } 
 stage('Docker Build') {
