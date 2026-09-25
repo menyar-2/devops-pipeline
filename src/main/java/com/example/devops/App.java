@@ -6,7 +6,12 @@ public class App {
         return "DevOps Pipeline works from feature-demo!";
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         System.out.println(message());
+        System.out.println("Application is running...");
+
+        while (true) {
+            Thread.sleep(60000);
+        }
     }
 }

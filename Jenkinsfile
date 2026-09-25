@@ -104,6 +104,15 @@ stage('Docker Push') {
 }   
     }
 
+stage('Docker Compose Deploy') {
+    steps {
+        sh '''
+            docker compose down || true
+            docker compose up -d
+            docker compose ps
+        '''
+    }
+}
     post {
         success {
             echo 'PIPELINE SUCCESS'
