@@ -51,7 +51,12 @@ pipeline {
             steps {
                 sh 'mvn package -DskipTests'
             }
-        } 
+        }
+stage('Nexus Deploy') {
+    steps {
+        sh 'mvn deploy -DskipTests'
+    }
+} 
 stage('Docker Build') {
     steps {
         sh 'docker build -t m221jft4043/devops-pipeline:1.0 .'
