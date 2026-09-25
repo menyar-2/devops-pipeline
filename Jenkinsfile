@@ -37,7 +37,7 @@ pipeline {
             )
         ]) {
             sh '''
-                mvn sonar:sonar \
+                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                   -Dsonar.projectKey=devops-pipeline \
                   -Dsonar.projectName=devops-pipeline \
                   -Dsonar.host.url=http://localhost:9000 \
