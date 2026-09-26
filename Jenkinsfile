@@ -38,6 +38,22 @@ pipeline {
     }
 }
 
+        stage('OWASP Dependency-Check') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'nvd-api-key',
+                variable: 'NVD_API_KEY'
+            )
+        ]) {
+            sh '''
+                mvn org.owasp:dependency-check-maven:13.0.0:check \
+                  -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+            '''
+        }
+    }
+}
+  
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([
