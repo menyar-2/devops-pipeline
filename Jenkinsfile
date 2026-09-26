@@ -131,6 +131,18 @@ EOF
                 '''
             }
         }
+        stage('Prometheus') {
+    steps {
+        sh '''
+            echo "Checking Prometheus readiness..."
+            curl -f http://localhost:9090/-/ready
+
+            echo "Checking Jenkins target in Prometheus..."
+            curl -f "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22jenkins%22%7D"
+        '''
+    }
+}
+
     }
 
     post {
