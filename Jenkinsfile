@@ -27,6 +27,16 @@ pipeline {
                 sh 'mvn test'
             }
         }
+        stage('SCA - RetireJS') {
+    steps {
+        dir('lab-samples') {
+            sh '''
+                npm ci
+                retire
+            '''
+        }
+    }
+}
 
         stage('SonarQube Analysis') {
             steps {
