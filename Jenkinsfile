@@ -117,6 +117,18 @@ EOF
             }
         }
 
+stage('Trivy Container Scan') {
+    steps {
+        sh '''
+            trivy image \
+              --timeout 30m \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              m221jft4043/devops-pipeline:1.0
+        '''
+    }
+}
         stage('Docker Push') {
             steps {
                 withCredentials([
