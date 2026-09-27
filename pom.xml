@@ -7,7 +7,7 @@
 
     <groupId>com.example</groupId>
     <artifactId>devops-pipeline</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.5-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -25,13 +25,22 @@
     </dependencies>
 
     <!-- Déploiement vers Nexus -->
-    <distributionManagement>
-        <repository>
-            <id>deploymentRepo</id>
-            <name>Nexus Repository</name>
-            <url>http://localhost:8081/repository/maven-releases/</url>
-        </repository>
-    </distributionManagement>
+    <!-- Déploiement vers Nexus -->
+<distributionManagement>
+
+    <repository>
+        <id>deploymentRepo</id>
+        <name>Nexus Releases</name>
+        <url>http://localhost:8081/repository/maven-releases/</url>
+    </repository>
+
+    <snapshotRepository>
+        <id>deploymentRepo</id>
+        <name>Nexus Snapshots</name>
+        <url>http://localhost:8081/repository/maven-snapshots/</url>
+    </snapshotRepository>
+
+</distributionManagement>
 
     <build>
         <plugins>
