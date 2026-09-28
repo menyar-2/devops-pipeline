@@ -4,15 +4,34 @@ metadata:
   name: devops-pipeline
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: devops-pipeline
+
   template:
     metadata:
       labels:
         app: devops-pipeline
+
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+
       containers:
         - name: devops-pipeline
           image: m221jft4043/devops-pipeline:1.0
           imagePullPolicy: Always
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop:
+                - ALL
