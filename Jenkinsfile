@@ -169,6 +169,23 @@ stage('Trivy Container Scan') {
                 '''
             }
         }
+stage('Kubernetes Deploy') {
+    steps {
+        sh '''
+            kubectl apply -f k8s/deployment.yaml
+        '''
+    }
+}
+
+stage('Kubernetes Verification') {
+    steps {
+        sh '''
+            kubectl rollout status deployment/devops-pipeline --timeout=120s
+            kubectl get pods
+            kubectl get deployments
+        '''
+    }
+}
         stage('Prometheus') {
     steps {
         sh '''

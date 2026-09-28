@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devops-pipeline
+  template:
+    metadata:
+      labels:
+        app: devops-pipeline
+    spec:
+      containers:
+        - name: devops-pipeline
+          image: m221jft4043/devops-pipeline:1.0
+          imagePullPolicy: Always
