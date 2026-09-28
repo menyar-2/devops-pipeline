@@ -109,6 +109,16 @@ EOF
             }
         }
 
+stage('IaC Security Scan') {
+    steps {
+        sh '''
+            trivy config \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              .
+        '''
+    }
+}
         stage('Docker Build') {
             steps {
                 sh '''
