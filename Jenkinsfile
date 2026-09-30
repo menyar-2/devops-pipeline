@@ -135,6 +135,7 @@ stage('Trivy Container Scan') {
               --scanners vuln \
               --severity HIGH,CRITICAL \
               --exit-code 1 \
+              --skip-db-update \
               m221jft4043/devops-pipeline:1.0
         '''
     }
