@@ -1,0 +1,27 @@
+Feature: Security acceptance test with Nmap
+
+  Background:
+    Given "nmap" is installed
+    And the following profile:
+      | name     | value       |
+      | hostname | 127.0.0.1   |
+
+  Scenario: Verify Jenkins port is open
+    When I launch an "nmap" attack with:
+      """
+      nmap -p 8080 <hostname>
+      """
+    Then the output should contain:
+      """
+      8080/tcp open
+      """
+
+  Scenario: Verify Prometheus port is open
+    When I launch an "nmap" attack with:
+      """
+      nmap -p 9090 <hostname>
+      """
+    Then the output should contain:
+      """
+      9090/tcp open
+      """

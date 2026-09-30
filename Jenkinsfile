@@ -186,6 +186,15 @@ stage('Kubernetes Verification') {
         '''
     }
 }
+stage('Security Acceptance Test - Gauntlt') {
+    steps {
+        dir('acceptance-security') {
+            sh '''
+                gauntlt network.attack
+            '''
+        }
+    }
+}
         stage('Prometheus') {
     steps {
         sh '''
