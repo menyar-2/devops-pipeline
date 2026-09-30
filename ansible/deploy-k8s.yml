@@ -5,8 +5,8 @@
   gather_facts: false
 
   tasks:
-    - name: Verify Minikube is running
-      command: minikube status
+    - name: Verify Kubernetes cluster is reachable
+      command: kubectl get nodes
       changed_when: false
 
     - name: Apply Kubernetes deployment
