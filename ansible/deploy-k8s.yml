@@ -1,0 +1,28 @@
+---
+- name: Deploy DevOps Pipeline to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Verify Minikube is running
+      command: minikube status
+      changed_when: false
+
+    - name: Apply Kubernetes deployment
+      command: kubectl apply -f ../k8s/deployment.yaml
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Wait for Kubernetes rollout
+      command: kubectl rollout status deployment/devops-pipeline --timeout=120s
+      changed_when: false
+
+    - name: Verify running pods
+      command: kubectl get pods
+      changed_when: false
+      register: pods_output
+
+    - name: Display pods
+      debug:
+        var: pods_output.stdout_lines

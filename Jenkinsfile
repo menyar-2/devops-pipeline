@@ -172,13 +172,14 @@ stage('Trivy Container Scan') {
                 '''
             }
         }
-stage('Kubernetes Deploy') {
+stage('Infrastructure as Code - Ansible') {
     steps {
         sh '''
-            kubectl apply -f k8s/deployment.yaml
+            ansible-playbook ansible/deploy-k8s.yml
         '''
     }
 }
+        
 
 stage('Kubernetes Verification') {
     steps {
