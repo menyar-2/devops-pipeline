@@ -27,6 +27,11 @@
     <artifactId>sqlite-jdbc</artifactId>
     <version>3.46.1.0</version>
 </dependency>
+<dependency>
+    <groupId>org.xerial</groupId>
+    <artifactId>sqlite-jdbc</artifactId>
+    <version>3.46.1.0</version>
+</dependency>
     </dependencies>
 
     <!-- Déploiement vers Nexus -->
@@ -69,6 +74,31 @@
                 </configuration>
             </plugin>
 
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-shade-plugin</artifactId>
+    <version>3.5.3</version>
+
+    <executions>
+        <execution>
+            <phase>package</phase>
+
+            <goals>
+                <goal>shade</goal>
+            </goals>
+
+            <configuration>
+                <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                <transformers>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                        <mainClass>com.example.devops.App</mainClass>
+                    </transformer>
+                </transformers>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
         </plugins>
     </build>
 
