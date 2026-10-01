@@ -83,25 +83,6 @@ EOF
         }
     }
 }
-    post {
-        always {
-            publishHTML(target: [
-                reportDir: '.',
-                reportFiles: 'talisman-report.html',
-                reportName: 'Talisman Security Report',
-                keepAll: true,
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-
-            archiveArtifacts(
-                artifacts: 'talisman-report.txt,talisman-report.html',
-                allowEmptyArchive: true
-            )
-        }
-    }
-}
-
         stage('Clean') {
             steps {
                 sh 'mvn clean'
