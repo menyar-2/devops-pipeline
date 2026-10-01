@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-pipeline-service
+
+spec:
+  selector:
+    app: devops-pipeline
+
+  type: NodePort
+
+  ports:
+    - protocol: TCP
+      port: 8085
+      targetPort: 8085
+      nodePort: 30085

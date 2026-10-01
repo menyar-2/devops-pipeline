@@ -3,6 +3,8 @@ services:
   app:
     image: m221jft4043/devops-pipeline:1.0
     container_name: devops-pipeline-app
+    ports:
+      - "8085:8085"
     depends_on:
       - mysql
     restart: unless-stopped

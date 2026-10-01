@@ -27,7 +27,17 @@ pipeline {
                 sh 'mvn test'
             }
         }
-          
+        stage('SCA - RetireJS') {
+    steps {
+        dir('lab-samples') {
+            sh '''
+                npm ci
+                retire
+            '''
+        }
+    }
+}
+
         stage('OWASP Dependency-Check') {
     steps {
         withCredentials([
@@ -233,47 +243,16 @@ stage('DAST HTTP Scan') {
             echo "DAST HTTP tests passed."
         '''
     }
-}
-            
-stage('Security Scanning - SQLMap') {
+}            
+stage('Security Acceptance Test - Gauntlt') {
     steps {
-        sh '''
-            set -e
-
-            kubectl port-forward deployment/devops-pipeline 8087:8085 \
-              > /tmp/sqlmap-port-forward.log 2>&1 &
-
-            PF_PID=$!
-
-            cleanup() {
-                kill $PF_PID 2>/dev/null || true
-            }
-
-            trap cleanup EXIT
-
-            echo "Waiting for SQLMap target..."
-
-            for i in $(seq 1 20); do
-                if curl -fsS "http://127.0.0.1:8087/item?id=1" >/dev/null; then
-                    break
-                fi
-                sleep 2
-            done
-
-            echo "Running SQLMap acceptance scan..."
-
-            sqlmap \
-              -u "http://127.0.0.1:8087/item?id=1" \
-              --batch \
-              --level=1 \
-              --risk=1 \
-              --dbms=SQLite
-
-            echo "SQLMap scan completed."
-        '''
+        dir('acceptance-security') {
+            sh '''
+                gauntlt network.attack
+            '''
+        }
     }
 }
-
         stage('Prometheus') {
     steps {
         sh '''

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devops-pipeline
+
 spec:
   replicas: 1
 
@@ -25,6 +26,9 @@ spec:
         - name: devops-pipeline
           image: m221jft4043/devops-pipeline:1.0
           imagePullPolicy: Always
+
+          ports:
+            - containerPort: 8085
 
           securityContext:
             allowPrivilegeEscalation: false
