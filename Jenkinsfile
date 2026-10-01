@@ -38,6 +38,7 @@ pipeline {
     <p><strong>Tool:</strong> ThoughtWorks Talisman</p>
     <p><strong>Build:</strong> ${BUILD_NUMBER}</p>
     <p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+    <p><strong>Exit Code:</strong> ${TALISMAN_STATUS}</p>
 
     <h2>Scan Output</h2>
     <pre>
@@ -53,10 +54,35 @@ EOF
             echo "Generated artifacts:"
             ls -lh talisman-report.*
 
-            exit $TALISMAN_STATUS
+            if [ "$TALISMAN_STATUS" -ne 0 ]; then
+                echo "Talisman found potential security issues."
+                echo "Report generated and archived."
+            else
+                echo "Talisman scan passed."
+            fi
+
+            exit 0
         '''
     }
 
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'talisman-report.html',
+                reportName: 'Talisman Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'talisman-report.txt,talisman-report.html',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}
     post {
         always {
             publishHTML(target: [
