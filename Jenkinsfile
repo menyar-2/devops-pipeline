@@ -113,22 +113,40 @@ EOF
             }
         }
           
-        stage('OWASP Dependency-Check') {
+stage('OWASP Dependency-Check') {
     steps {
-        withCredentials([
-            string(
-                credentialsId: 'nvd-api-key',
-                variable: 'NVD_API_KEY'
-            )
-        ]) {
+        withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
             sh '''
                 mvn org.owasp:dependency-check-maven:13.0.0:check \
                   -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
             '''
         }
     }
-}
-  
+
+    post {
+        always {
+            sh '''
+                if [ -f target/dependency-check-report.html ]; then
+                    cp target/dependency-check-report.html dependency-check-report.html
+                fi
+            '''
+
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'dependency-check-report.html',
+                reportName: 'OWASP Dependency-Check Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'dependency-check-report.html',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}  
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([
