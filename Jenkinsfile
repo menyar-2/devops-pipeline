@@ -190,6 +190,21 @@ stage('Kubernetes Verification') {
         '''
     }
 }
+stage('DAST HTTP Scan') {
+    steps {
+        sh '''
+            kubectl port-forward service/devops-pipeline-service 8086:8085 > /tmp/port-forward.log 2>&1 &
+            PF_PID=$!
+
+            sleep 5
+
+            curl -f http://127.0.0.1:8086/
+            curl -f http://127.0.0.1:8086/health
+
+            kill $PF_PID || true
+        '''
+    }
+}
 stage('Security Acceptance Test - Gauntlt') {
     steps {
         dir('acceptance-security') {
