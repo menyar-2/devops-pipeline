@@ -243,7 +243,7 @@ stage('DAST HTTP Scan') {
             echo "DAST HTTP tests passed."
         '''
     }
-            
+}            
 stage('Security Acceptance Test - Gauntlt') {
     steps {
         dir('acceptance-security') {
