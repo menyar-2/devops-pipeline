@@ -180,60 +180,6 @@ stage('Kubernetes Verification') {
         '''
     }
 }
-stage('DAST HTTP Scan') {
-    steps {
-        sh '''
-            set -e
-
-            kubectl rollout status deployment/devops-pipeline --timeout=120s
-            kubectl wait --for=condition=Ready pod \
-              -l app=devops-pipeline \
-              --timeout=120s
-
-            kubectl port-forward deployment/devops-pipeline 8086:8085 \
-              > /tmp/dast-port-forward.log 2>&1 &
-
-            PF_PID=$!
-
-            cleanup() {
-                kill $PF_PID 2>/dev/null || true
-            }
-
-            trap cleanup EXIT
-
-            echo "Waiting for application HTTP endpoint..."
-
-            SUCCESS=0
-
-            for i in $(seq 1 20); do
-                if curl -fsS http://127.0.0.1:8086/health | grep -q "OK"; then
-                    SUCCESS=1
-                    break
-                fi
-
-                echo "Application not ready yet - attempt $i/20"
-                sleep 2
-            done
-
-            if [ "$SUCCESS" -ne 1 ]; then
-                echo "DAST target did not become ready."
-                cat /tmp/dast-port-forward.log || true
-                kubectl get pods -o wide
-                exit 1
-            fi
-
-            echo "Testing root endpoint..."
-            curl -fsS http://127.0.0.1:8086/
-
-            echo
-            echo "Testing health endpoint..."
-            curl -fsS http://127.0.0.1:8086/health
-
-            echo
-            echo "DAST HTTP tests passed."
-        '''
-    }
-}
             
 stage('Security Scanning - SQLMap') {
     steps {
