@@ -33,21 +33,33 @@ pipeline {
     <title>Talisman Security Report</title>
 </head>
 <body>
-    <h1>ThoughtWorks Talisman Security Report</h1>
-    <p><strong>Security phase:</strong> Pre-Commit Security</p>
-    <p><strong>Tool:</strong> ThoughtWorks Talisman</p>
-    <p><strong>Build:</strong> ${BUILD_NUMBER}</p>
-    <p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
-    <p><strong>Exit Code:</strong> ${TALISMAN_STATUS}</p>
 
-    <h2>Scan Output</h2>
-    <pre>
+<h1>ThoughtWorks Talisman Security Report</h1>
+
+<p><strong>Security phase:</strong> Pre-Commit Security</p>
+<p><strong>Tool:</strong> ThoughtWorks Talisman</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+EOF
+
+if [ "$TALISMAN_STATUS" -eq 0 ]; then
+   echo '<p><strong>Status:</strong> CLEAN</p>' >> reports/talisman/report.html
+else
+    echo '<p><strong>Status:</strong> FINDINGS DETECTED</p>' >> reports/talisman/report.html
+fi
+
+cat >> reports/talisman/report.html <<EOF
+
+<h2>Scan Output</h2>
+
+<pre>
 $(cat reports/talisman/talisman.txt)
-    </pre>
+</pre>
+
 </body>
 </html>
 EOF
-
             cp reports/talisman/talisman.txt talisman-report.txt
             cp reports/talisman/report.html talisman-report.html
 
