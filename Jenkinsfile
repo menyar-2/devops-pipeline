@@ -9,6 +9,72 @@ pipeline {
                     url: 'https://github.com/menyar-2/devops-pipeline.git'
             }
         }
+    stage('Pre-Commit Security - Talisman') {
+    steps {
+        sh '''
+            mkdir -p reports/talisman
+
+            echo "========================================="
+            echo " TALISMAN SECURITY SCAN"
+            echo "========================================="
+
+            set +e
+
+            talisman --scan > reports/talisman/talisman.txt 2>&1
+            TALISMAN_STATUS=$?
+
+            set -e
+
+            cat > reports/talisman/report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Talisman Security Report</title>
+</head>
+<body>
+    <h1>ThoughtWorks Talisman Security Report</h1>
+    <p><strong>Security phase:</strong> Pre-Commit Security</p>
+    <p><strong>Tool:</strong> ThoughtWorks Talisman</p>
+    <p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+    <p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+    <h2>Scan Output</h2>
+    <pre>
+$(cat reports/talisman/talisman.txt)
+    </pre>
+</body>
+</html>
+EOF
+
+            cp reports/talisman/talisman.txt talisman-report.txt
+            cp reports/talisman/report.html talisman-report.html
+
+            echo "Generated artifacts:"
+            ls -lh talisman-report.*
+
+            exit $TALISMAN_STATUS
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'talisman-report.html',
+                reportName: 'Talisman Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'talisman-report.txt,talisman-report.html',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}
 
         stage('Clean') {
             steps {
