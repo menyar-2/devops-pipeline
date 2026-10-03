@@ -278,33 +278,55 @@ stage('IaC Security Scan') {
             echo " TRIVY IaC SECURITY SCAN"
             echo "========================================="
 
-            # Rapport JSON
             trivy config \
               --severity HIGH,CRITICAL \
               --format json \
               --output reports/trivy-iac/trivy-iac-report.json \
               .
 
-            # Rapport HTML
             trivy config \
               --severity HIGH,CRITICAL \
-              --format template \
-              --template "@contrib/html.tpl" \
-              --output reports/trivy-iac/trivy-iac-report.html \
-              .
+              --exit-code 0 \
+              . > reports/trivy-iac/trivy-iac-output.txt 2>&1
 
-            # Scan bloquant du pipeline
+            cat > reports/trivy-iac/trivy-iac-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Trivy IaC Security Report</title>
+</head>
+<body>
+
+<h1>Trivy IaC Security Report</h1>
+
+<p><strong>Security phase:</strong> Infrastructure as Code Security</p>
+<p><strong>Tool:</strong> Trivy</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Scan Output</h2>
+
+<pre>
+$(cat reports/trivy-iac/trivy-iac-output.txt)
+</pre>
+
+</body>
+</html>
+EOF
+
+            cp reports/trivy-iac/trivy-iac-report.json trivy-iac-report.json
+            cp reports/trivy-iac/trivy-iac-report.html trivy-iac-report.html
+            cp reports/trivy-iac/trivy-iac-output.txt trivy-iac-output.txt
+
+            echo "Generated Trivy IaC artifacts:"
+            ls -lh trivy-iac-report.* trivy-iac-output.txt
+
+            # Security gate
             trivy config \
               --severity HIGH,CRITICAL \
               --exit-code 1 \
               .
-
-            # Copies à la racine pour les Artefacts Jenkins
-            cp reports/trivy-iac/trivy-iac-report.json trivy-iac-report.json
-            cp reports/trivy-iac/trivy-iac-report.html trivy-iac-report.html
-
-            echo "Generated Trivy IaC artifacts:"
-            ls -lh trivy-iac-report.*
         '''
     }
 
@@ -320,12 +342,13 @@ stage('IaC Security Scan') {
             ])
 
             archiveArtifacts(
-                artifacts: 'trivy-iac-report.html,trivy-iac-report.json',
+                artifacts: 'trivy-iac-report.html,trivy-iac-report.json,trivy-iac-output.txt',
                 allowEmptyArchive: true
             )
         }
     }
 }
+
         stage('Docker Build') {
             steps {
                 sh '''
