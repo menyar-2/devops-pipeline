@@ -272,11 +272,58 @@ EOF
 stage('IaC Security Scan') {
     steps {
         sh '''
+            mkdir -p reports/trivy-iac
+
+            echo "========================================="
+            echo " TRIVY IaC SECURITY SCAN"
+            echo "========================================="
+
+            # Rapport JSON
+            trivy config \
+              --severity HIGH,CRITICAL \
+              --format json \
+              --output reports/trivy-iac/trivy-iac-report.json \
+              .
+
+            # Rapport HTML
+            trivy config \
+              --severity HIGH,CRITICAL \
+              --format template \
+              --template "@contrib/html.tpl" \
+              --output reports/trivy-iac/trivy-iac-report.html \
+              .
+
+            # Scan bloquant du pipeline
             trivy config \
               --severity HIGH,CRITICAL \
               --exit-code 1 \
               .
+
+            # Copies à la racine pour les Artefacts Jenkins
+            cp reports/trivy-iac/trivy-iac-report.json trivy-iac-report.json
+            cp reports/trivy-iac/trivy-iac-report.html trivy-iac-report.html
+
+            echo "Generated Trivy IaC artifacts:"
+            ls -lh trivy-iac-report.*
         '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'trivy-iac-report.html',
+                reportName: 'Trivy IaC Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'trivy-iac-report.html,trivy-iac-report.json',
+                allowEmptyArchive: true
+            )
+        }
     }
 }
         stage('Docker Build') {
