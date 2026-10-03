@@ -147,25 +147,92 @@ stage('OWASP Dependency-Check') {
         }
     }
 }  
-        stage('SonarQube Analysis') {
-            steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'sonarqube-token',
-                        variable: 'SONAR_TOKEN'
-                    )
-                ]) {
-                    sh '''
-                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                          -Dsonar.projectKey=devops-pipeline \
-                          -Dsonar.projectName=devops-pipeline \
-                          -Dsonar.host.url=http://localhost:9000 \
-                          -Dsonar.token=$SONAR_TOKEN
-                    '''
-                }
-            }
-        }
+stage('SonarQube Analysis') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'sonarqube-token',
+                variable: 'SONAR_TOKEN'
+            )
+        ]) {
+            sh '''
+                mkdir -p reports/sonarqube
 
+                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                  -Dsonar.projectKey=devops-pipeline \
+                  -Dsonar.projectName=devops-pipeline \
+                  -Dsonar.host.url=http://localhost:9000 \
+                  -Dsonar.token=$SONAR_TOKEN \
+                  > reports/sonarqube/sonar-output.txt 2>&1
+
+                SONAR_STATUS=$?
+
+                if [ "$SONAR_STATUS" -eq 0 ]; then
+                    SONAR_RESULT="SUCCESS"
+                else
+                    SONAR_RESULT="FAILED"
+                fi
+
+                cat > reports/sonarqube/report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SonarQube Analysis Report</title>
+</head>
+<body>
+
+<h1>SonarQube Static Analysis Report</h1>
+
+<p><strong>Security phase:</strong> Static Analysis</p>
+<p><strong>Tool:</strong> SonarQube</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+<p><strong>Status:</strong> ${SONAR_RESULT}</p>
+
+<p>
+<strong>Dashboard:</strong>
+<a href="http://localhost:9000/dashboard?id=devops-pipeline">
+Open SonarQube Dashboard
+</a>
+</p>
+
+<h2>Scanner Output</h2>
+
+<pre>
+$(cat reports/sonarqube/sonar-output.txt)
+</pre>
+
+</body>
+</html>
+EOF
+
+                cp reports/sonarqube/report.html sonarqube-report.html
+                cp reports/sonarqube/sonar-output.txt sonarqube-output.txt
+
+                exit $SONAR_STATUS
+            '''
+        }
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'sonarqube-report.html',
+                reportName: 'SonarQube Analysis Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'sonarqube-report.html,sonarqube-output.txt',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}
         stage('Package') {
             steps {
                 sh 'mvn package -DskipTests'
