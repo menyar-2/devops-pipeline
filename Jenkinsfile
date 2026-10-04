@@ -637,6 +637,133 @@ stage('Production - ZAP Baseline Scan') {
     }
 }
 
+stage('Production - Nmap Security Smoke Test') {
+    steps {
+        sh '''
+            set -e
+
+            echo "========================================="
+            echo " PRODUCTION - NMAP SECURITY SMOKE TEST"
+            echo "========================================="
+
+            mkdir -p reports/nmap
+
+            echo "Starting Kubernetes port-forward..."
+
+            kubectl port-forward \
+              --address 0.0.0.0 \
+              service/devops-pipeline-service \
+              8089:8085 \
+              > /tmp/nmap-port-forward.log 2>&1 &
+
+            PF_PID=$!
+
+            cleanup() {
+                echo "Stopping Nmap port-forward..."
+                kill $PF_PID 2>/dev/null || true
+            }
+
+            trap cleanup EXIT
+
+            echo "Waiting for application..."
+
+            READY=0
+
+            for i in $(seq 1 20); do
+                if curl -fsS http://127.0.0.1:8089/health >/dev/null; then
+                    READY=1
+                    echo "Application is ready."
+                    break
+                fi
+
+                echo "Application not ready - attempt $i/20"
+                sleep 2
+            done
+
+            if [ "$READY" -ne 1 ]; then
+                echo "ERROR: application unavailable for Nmap scan"
+                cat /tmp/nmap-port-forward.log || true
+                exit 1
+            fi
+
+            HOST_IP=$(hostname -I | awk '{print $1}')
+
+            echo "Nmap target: $HOST_IP:8089"
+
+            nmap \
+              -sV \
+              -Pn \
+              -p 8089 \
+              "$HOST_IP" \
+              -oN reports/nmap/nmap-production-report.txt
+
+            cp reports/nmap/nmap-production-report.txt \
+               nmap-production-report.txt
+
+            cat > reports/nmap/nmap-production-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Nmap Production Security Report</title>
+</head>
+<body>
+
+<h1>Nmap Production Security Smoke Test</h1>
+
+<p><strong>Security phase:</strong> Production</p>
+<p><strong>Tool:</strong> Nmap</p>
+<p><strong>Target:</strong> ${HOST_IP}:8089</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Nmap Scan Output</h2>
+
+<pre>
+$(cat reports/nmap/nmap-production-report.txt)
+</pre>
+
+</body>
+</html>
+EOF
+
+            cp reports/nmap/nmap-production-report.html \
+               nmap-production-report.html
+
+            echo "Generated Nmap artifacts:"
+            ls -lh nmap-production-report.html \
+                   nmap-production-report.txt
+
+            if ! grep -q "8089/tcp open" \
+                 reports/nmap/nmap-production-report.txt; then
+
+                echo "ERROR: expected application port 8089 is not open."
+                exit 1
+            fi
+
+            echo "Nmap Production Security Smoke Test passed."
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'nmap-production-report.html',
+                reportName: 'Nmap Production Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'nmap-production-report.html,nmap-production-report.txt',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
+
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
