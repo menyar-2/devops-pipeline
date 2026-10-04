@@ -317,10 +317,9 @@ EOF
 
             cp reports/trivy-iac/trivy-iac-report.json trivy-iac-report.json
             cp reports/trivy-iac/trivy-iac-report.html trivy-iac-report.html
-            cp reports/trivy-iac/trivy-iac-output.txt trivy-iac-output.txt
 
             echo "Generated Trivy IaC artifacts:"
-            ls -lh trivy-iac-report.* trivy-iac-output.txt
+            ls -lh trivy-iac-report.*
 
             # Security gate
             trivy config \
@@ -342,9 +341,9 @@ EOF
             ])
 
             archiveArtifacts(
-                artifacts: 'trivy-iac-report.html,trivy-iac-report.json,trivy-iac-output.txt',
-                allowEmptyArchive: true
-            )
+    artifacts: 'trivy-iac-report.html,trivy-iac-report.json',
+    allowEmptyArchive: true
+)
         }
     }
 }
