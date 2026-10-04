@@ -359,18 +359,98 @@ EOF
 stage('Trivy Container Scan') {
     steps {
         sh '''
+            mkdir -p reports/trivy-container
+
+            echo "========================================="
+            echo " TRIVY CONTAINER SECURITY SCAN"
+            echo "========================================="
+
+            # Rapport JSON
             trivy image \
               --timeout 30m \
               --scanners vuln \
               --severity HIGH,CRITICAL \
-              --exit-code 1 \
               --skip-db-update \
               --skip-java-db-update \
+              --format json \
+              --output reports/trivy-container/trivy-container-report.json \
+              m221jft4043/devops-pipeline:1.0
+
+            # Sortie lisible temporaire
+            trivy image \
+              --timeout 30m \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --skip-db-update \
+              --skip-java-db-update \
+              --exit-code 0 \
+              m221jft4043/devops-pipeline:1.0 \
+              > reports/trivy-container/trivy-container-output.txt 2>&1
+
+            # Rapport HTML
+            cat > reports/trivy-container/trivy-container-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Trivy Container Security Report</title>
+</head>
+<body>
+
+<h1>Trivy Container Security Report</h1>
+
+<p><strong>Security phase:</strong> Container Security</p>
+<p><strong>Tool:</strong> Trivy</p>
+<p><strong>Image:</strong> m221jft4043/devops-pipeline:1.0</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Scan Output</h2>
+
+<pre>
+$(cat reports/trivy-container/trivy-container-output.txt)
+</pre>
+
+</body>
+</html>
+EOF
+
+            cp reports/trivy-container/trivy-container-report.json trivy-container-report.json
+            cp reports/trivy-container/trivy-container-report.html trivy-container-report.html
+
+            echo "Generated Trivy Container artifacts:"
+            ls -lh trivy-container-report.*
+
+            # Security gate
+            trivy image \
+              --timeout 30m \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --skip-db-update \
+              --skip-java-db-update \
+              --exit-code 1 \
               m221jft4043/devops-pipeline:1.0
         '''
     }
-}
 
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'trivy-container-report.html',
+                reportName: 'Trivy Container Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'trivy-container-report.html,trivy-container-report.json',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}
         stage('Docker Push') {
             steps {
                 withCredentials([
