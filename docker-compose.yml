@@ -8,7 +8,9 @@ services:
     depends_on:
       - mysql
     restart: unless-stopped
-
+    
+    secrets:
+      - app_secret
   mysql:
     image: mysql:8.0
     container_name: devops-mysql
@@ -25,3 +27,8 @@ services:
 
 volumes:
   mysql-data:
+
+
+secrets:
+  app_secret:
+    file: ./secrets/app_secret.txt

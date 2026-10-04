@@ -3,3 +3,4 @@ target/
 .vscode/
 *.log
 lab-samples/node_modules/
+secrets/

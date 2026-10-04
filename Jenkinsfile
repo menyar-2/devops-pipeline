@@ -893,6 +893,129 @@ EOF
     }
 }
 
+stage('Production - Docker Secrets Validation') {
+    steps {
+        sh '''
+            set -e
+
+            echo "========================================="
+            echo " PRODUCTION - DOCKER SECRETS VALIDATION"
+            echo "========================================="
+
+            mkdir -p reports/docker-secrets
+
+            SECRET_PATH="/run/secrets/app_secret"
+
+            echo "Checking Docker secret inside application container..."
+
+            if docker compose exec -T app test -f "$SECRET_PATH"; then
+                SECRET_PRESENT="YES"
+            else
+                SECRET_PRESENT="NO"
+            fi
+
+            if docker compose exec -T app test -r "$SECRET_PATH"; then
+                SECRET_READABLE="YES"
+            else
+                SECRET_READABLE="NO"
+            fi
+
+            SECRET_PERMS=$(docker compose exec -T app \
+                stat -c "%a" "$SECRET_PATH" 2>/dev/null || echo "UNKNOWN")
+
+            if [ "$SECRET_PRESENT" = "YES" ] && \
+               [ "$SECRET_READABLE" = "YES" ]; then
+                DOCKER_SECRET_RESULT="PASS"
+            else
+                DOCKER_SECRET_RESULT="FAIL"
+            fi
+
+            cat > reports/docker-secrets/docker-secrets-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Docker Secrets Security Report</title>
+</head>
+<body>
+
+<h1>Docker Secrets Security Report</h1>
+
+<p><strong>Phase:</strong> Production - Secrets Management</p>
+<p><strong>Tool:</strong> Docker Secrets / Docker Compose Secrets</p>
+<p><strong>Container:</strong> devops-pipeline-app</p>
+<p><strong>Secret Path:</strong> /run/secrets/app_secret</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Validation</h2>
+
+<table border="1" cellpadding="8">
+<tr>
+    <th>Check</th>
+    <th>Result</th>
+</tr>
+
+<tr>
+    <td>Secret file present</td>
+    <td>${SECRET_PRESENT}</td>
+</tr>
+
+<tr>
+    <td>Secret file readable</td>
+    <td>${SECRET_READABLE}</td>
+</tr>
+
+<tr>
+    <td>File permissions</td>
+    <td>${SECRET_PERMS}</td>
+</tr>
+
+</table>
+
+<h2>Overall Result</h2>
+<p><strong>${DOCKER_SECRET_RESULT}</strong></p>
+
+<p>The secret value is intentionally not displayed.</p>
+
+</body>
+</html>
+EOF
+
+            cp reports/docker-secrets/docker-secrets-report.html \
+               docker-secrets-report.html
+
+            echo "Generated Docker Secrets artifact:"
+            ls -lh docker-secrets-report.html
+
+            if [ "$DOCKER_SECRET_RESULT" != "PASS" ]; then
+                echo "Docker Secrets validation failed."
+                exit 1
+            fi
+
+            echo "Docker Secrets validation passed."
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'docker-secrets-report.html',
+                reportName: 'Docker Secrets Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'docker-secrets-report.html',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
+
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
