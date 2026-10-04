@@ -500,6 +500,143 @@ stage('Kubernetes Verification') {
     }
 }
 
+stage('Production - ZAP Baseline Scan') {
+    steps {
+        sh '''
+            set -e
+
+            echo "========================================="
+            echo " PRODUCTION - ZAP BASELINE SCAN"
+            echo "========================================="
+
+            rm -rf zap-reports
+            mkdir -p zap-reports
+            chmod 777 zap-reports
+
+            echo "Starting Kubernetes port-forward..."
+
+            kubectl port-forward \
+              --address 0.0.0.0 \
+              service/devops-pipeline-service \
+              8088:8085 \
+              > /tmp/zap-port-forward.log 2>&1 &
+
+            PF_PID=$!
+
+            cleanup() {
+                echo "Stopping port-forward..."
+                kill $PF_PID 2>/dev/null || true
+            }
+
+            trap cleanup EXIT
+
+            echo "Waiting for application..."
+
+            READY=0
+
+            for i in $(seq 1 20); do
+                if curl -fsS http://127.0.0.1:8088/health >/dev/null; then
+                    READY=1
+                    echo "Application is ready."
+                    break
+                fi
+
+                echo "Application not ready - attempt $i/20"
+                sleep 2
+            done
+
+            if [ "$READY" -ne 1 ]; then
+                echo "ERROR: application unavailable for ZAP scan"
+                cat /tmp/zap-port-forward.log || true
+                exit 1
+            fi
+
+            HOST_IP=$(hostname -I | awk '{print $1}')
+
+            echo "WSL host IP: $HOST_IP"
+            echo "ZAP target: http://$HOST_IP:8088"
+
+            echo "Testing target from ZAP container..."
+
+            docker run --rm \
+              ghcr.io/zaproxy/zaproxy:stable \
+              curl -I "http://$HOST_IP:8088/"
+
+            echo "Running ZAP Baseline Scan..."
+
+            set +e
+
+            docker run --rm \
+              -v "$(pwd)/zap-reports:/zap/wrk/:rw" \
+              ghcr.io/zaproxy/zaproxy:stable \
+              zap-baseline.py \
+              -t "http://$HOST_IP:8088" \
+              -r zap-baseline-report.html \
+              -J zap-baseline-report.json
+
+            ZAP_STATUS=$?
+
+            set -e
+
+            echo "ZAP exit code: $ZAP_STATUS"
+
+            echo "Checking generated reports..."
+
+            if [ ! -f zap-reports/zap-baseline-report.html ]; then
+                echo "ERROR: zap-baseline-report.html not generated"
+                ls -lh zap-reports || true
+                exit 1
+            fi
+
+            if [ ! -f zap-reports/zap-baseline-report.json ]; then
+                echo "ERROR: zap-baseline-report.json not generated"
+                ls -lh zap-reports || true
+                exit 1
+            fi
+
+            cp zap-reports/zap-baseline-report.html zap-baseline-report.html
+            cp zap-reports/zap-baseline-report.json zap-baseline-report.json
+
+            echo "Generated ZAP artifacts:"
+            ls -lh zap-baseline-report.html zap-baseline-report.json
+
+            if [ "$ZAP_STATUS" -eq 1 ]; then
+                echo "ZAP detected blocking security findings."
+                exit 1
+
+            elif [ "$ZAP_STATUS" -eq 3 ]; then
+                echo "ZAP execution error."
+                exit 1
+
+            elif [ "$ZAP_STATUS" -eq 2 ]; then
+                echo "ZAP Baseline completed with warnings."
+                exit 0
+            fi
+
+            echo "ZAP Baseline Scan completed successfully."
+            exit 0
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'zap-baseline-report.html',
+                reportName: 'ZAP Baseline Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'zap-baseline-report.html,zap-baseline-report.json',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
+
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
