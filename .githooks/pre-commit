@@ -4,27 +4,22 @@ echo "======================================"
 echo " TALISMAN PRE-COMMIT SECURITY SCAN"
 echo "======================================"
 
-# Sauvegarder temporairement le Jenkinsfile s'il est staged
 JENKINS_STAGED=0
 
 if git diff --cached --name-only | grep -qx "Jenkinsfile"; then
     JENKINS_STAGED=1
-
     git reset -q HEAD -- Jenkinsfile
 fi
 
-# Lancer Talisman sur les autres fichiers
-talisman
-
+talisman --githook pre-commit
 STATUS=$?
 
-# Remettre Jenkinsfile dans le staging
 if [ "$JENKINS_STAGED" -eq 1 ]; then
     git add Jenkinsfile
 fi
 
 if [ "$STATUS" -ne 0 ]; then
-    echo ""
+    echo
     echo "======================================"
     echo "COMMIT BLOCKED BY TALISMAN"
     echo "Sensitive data or security issue detected."
@@ -32,7 +27,7 @@ if [ "$STATUS" -ne 0 ]; then
     exit 1
 fi
 
-echo ""
+echo
 echo "======================================"
 echo "TALISMAN CHECK PASSED"
 echo "Commit authorized."
