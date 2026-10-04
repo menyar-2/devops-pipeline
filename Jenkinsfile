@@ -764,6 +764,135 @@ EOF
     }
 }
 
+stage('Production - Vault Secrets Check') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'vault-token',
+                variable: 'VAULT_TOKEN'
+            )
+        ]) {
+            sh '''
+                set -e
+
+                echo "========================================="
+                echo " PRODUCTION - VAULT SECRETS CHECK"
+                echo "========================================="
+
+                mkdir -p reports/vault
+
+                VAULT_ADDR="http://127.0.0.1:8200"
+
+                echo "Checking Vault health..."
+
+                curl -fsS \
+                  "$VAULT_ADDR/v1/sys/health" \
+                  > reports/vault/vault-health.json
+
+                echo "Reading secret metadata..."
+
+                SECRET_RESPONSE=$(curl -fsS \
+                  -H "X-Vault-Token: $VAULT_TOKEN" \
+                  "$VAULT_ADDR/v1/secret/data/devops-pipeline")
+
+                echo "$SECRET_RESPONSE" \
+                  > reports/vault/vault-secret-response.json
+
+                MYSQL_USER_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"mysql_user"' && echo YES || echo NO)
+                MYSQL_PASSWORD_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"mysql_password"' && echo YES || echo NO)
+                DOCKER_USERNAME_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"docker_username"' && echo YES || echo NO)
+
+                if [ "$MYSQL_USER_PRESENT" = "YES" ] && \
+                   [ "$MYSQL_PASSWORD_PRESENT" = "YES" ] && \
+                   [ "$DOCKER_USERNAME_PRESENT" = "YES" ]; then
+                    VAULT_RESULT="PASS"
+                else
+                    VAULT_RESULT="FAIL"
+                fi
+
+                cat > reports/vault/vault-security-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>HashiCorp Vault Security Report</title>
+</head>
+<body>
+
+<h1>HashiCorp Vault Security Report</h1>
+
+<p><strong>Phase:</strong> Production - Secrets Management</p>
+<p><strong>Tool:</strong> HashiCorp Vault</p>
+<p><strong>Vault Address:</strong> ${VAULT_ADDR}</p>
+<p><strong>Secret Path:</strong> secret/devops-pipeline</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Secret Validation</h2>
+
+<table border="1" cellpadding="8">
+<tr>
+    <th>Secret Field</th>
+    <th>Status</th>
+</tr>
+<tr>
+    <td>mysql_user</td>
+    <td>${MYSQL_USER_PRESENT}</td>
+</tr>
+<tr>
+    <td>mysql_password</td>
+    <td>${MYSQL_PASSWORD_PRESENT}</td>
+</tr>
+<tr>
+    <td>docker_username</td>
+    <td>${DOCKER_USERNAME_PRESENT}</td>
+</tr>
+</table>
+
+<h2>Result</h2>
+<p><strong>${VAULT_RESULT}</strong></p>
+
+<p>No secret values are displayed in this report.</p>
+
+</body>
+</html>
+EOF
+
+                cp reports/vault/vault-security-report.html \
+                   vault-security-report.html
+
+                echo "Generated Vault artifact:"
+                ls -lh vault-security-report.html
+
+                if [ "$VAULT_RESULT" != "PASS" ]; then
+                    echo "Vault secret validation failed."
+                    exit 1
+                fi
+
+                echo "Vault secret validation passed."
+            '''
+        }
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'vault-security-report.html',
+                reportName: 'Vault Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'vault-security-report.html',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
+
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
