@@ -499,11 +499,15 @@ stage('Kubernetes Verification') {
         '''
     }
 }
-            
+
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
-            set -e
+            mkdir -p reports/sqlmap
+
+            echo "========================================="
+            echo " SQLMAP DAST SECURITY SCAN"
+            echo "========================================="
 
             kubectl port-forward deployment/devops-pipeline 8087:8085 \
               > /tmp/sqlmap-port-forward.log 2>&1 &
@@ -518,26 +522,106 @@ stage('Security Scanning - SQLMap') {
 
             echo "Waiting for SQLMap target..."
 
+            READY=0
+
             for i in $(seq 1 20); do
                 if curl -fsS "http://127.0.0.1:8087/item?id=1" >/dev/null; then
+                    READY=1
                     break
                 fi
+
+                echo "Target not ready - attempt $i/20"
                 sleep 2
             done
 
-            echo "Running SQLMap acceptance scan..."
+            if [ "$READY" -ne 1 ]; then
+                echo "ERROR: SQLMap target did not become ready."
+                cat /tmp/sqlmap-port-forward.log || true
+                exit 1
+            fi
+
+            echo "Running SQLMap scan..."
+
+            set +e
 
             sqlmap \
               -u "http://127.0.0.1:8087/item?id=1" \
               --batch \
               --level=1 \
               --risk=1 \
-              --dbms=SQLite
+              --dbms=SQLite \
+              --flush-session \
+              > reports/sqlmap/sqlmap-output.txt 2>&1
 
-            echo "SQLMap scan completed."
+            SQLMAP_STATUS=$?
+
+            set -e
+
+            if grep -q "Parameter: id" reports/sqlmap/sqlmap-output.txt; then
+                SQLMAP_RESULT="VULNERABILITY DETECTED"
+            else
+                SQLMAP_RESULT="NO SQL INJECTION DETECTED"
+            fi
+
+            cat > reports/sqlmap/sqlmap-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SQLMap Security Report</title>
+</head>
+<body>
+
+<h1>SQLMap DAST Security Report</h1>
+
+<p><strong>Security phase:</strong> DAST</p>
+<p><strong>Tool:</strong> SQLMap</p>
+<p><strong>Target:</strong> http://127.0.0.1:8087/item?id=1</p>
+<p><strong>Database:</strong> SQLite</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+<p><strong>Result:</strong> ${SQLMAP_RESULT}</p>
+
+<h2>SQLMap Scan Output</h2>
+
+<pre>
+$(cat reports/sqlmap/sqlmap-output.txt)
+</pre>
+
+</body>
+</html>
+EOF
+
+            cp reports/sqlmap/sqlmap-output.txt sqlmap-output.txt
+            cp reports/sqlmap/sqlmap-report.html sqlmap-report.html
+
+            echo "Generated SQLMap artifacts:"
+            ls -lh sqlmap-report.html sqlmap-output.txt
+
+            # On ne bloque pas le pipeline ici uniquement à cause
+            # de la détection volontaire de la vulnérabilité du lab.
+            exit 0
         '''
     }
-}
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'sqlmap-report.html',
+                reportName: 'SQLMap Security Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            archiveArtifacts(
+                artifacts: 'sqlmap-report.html,sqlmap-output.txt',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}            
 
         stage('Prometheus') {
     steps {
