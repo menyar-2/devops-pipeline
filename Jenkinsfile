@@ -487,7 +487,9 @@ stage('Docker Compose Deploy') {
                 echo "========================================="
 
                 mkdir -p secrets         
-
+                if [ -d secrets/app_secret.txt ]; then
+    rm -rf secrets/app_secret.txt
+fi
                 set +x
 
                 APP_SECRET=$(curl -fsS \
