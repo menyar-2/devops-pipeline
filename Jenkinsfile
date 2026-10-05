@@ -498,7 +498,7 @@ fi
                   | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["data"]["app_secret"])')
 
                 printf '%s' "$APP_SECRET" > secrets/app_secret.txt
-                chmod 600 secrets/app_secret.txt
+                chmod 444 secrets/app_secret.txt
 
                 unset APP_SECRET
 
