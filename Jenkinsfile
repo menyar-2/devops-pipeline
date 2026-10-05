@@ -833,22 +833,34 @@ stage('Production - Vault Secrets Check') {
                   "$VAULT_ADDR/v1/sys/health" \
                   > reports/vault/vault-health.json
 
-                echo "Reading secret metadata..."
+                echo "Checking required secret fields..."
 
-                SECRET_RESPONSE=$(curl -fsS \
+                set +x
+
+                SECRET_JSON=$(curl -fsS \
                   -H "X-Vault-Token: $VAULT_TOKEN" \
                   "$VAULT_ADDR/v1/secret/data/devops-pipeline")
 
-                echo "$SECRET_RESPONSE" \
-                  > reports/vault/vault-secret-response.json
+                MYSQL_USER_PRESENT=$(printf '%s' "$SECRET_JSON" | \
+                  python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]["data"]; print("YES" if "mysql_user" in d else "NO")')
 
-                MYSQL_USER_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"mysql_user"' && echo YES || echo NO)
-                MYSQL_PASSWORD_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"mysql_password"' && echo YES || echo NO)
-                DOCKER_USERNAME_PRESENT=$(echo "$SECRET_RESPONSE" | grep -q '"docker_username"' && echo YES || echo NO)
+                MYSQL_PASSWORD_PRESENT=$(printf '%s' "$SECRET_JSON" | \
+                  python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]["data"]; print("YES" if "mysql_password" in d else "NO")')
+
+                DOCKER_USERNAME_PRESENT=$(printf '%s' "$SECRET_JSON" | \
+                  python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]["data"]; print("YES" if "docker_username" in d else "NO")')
+
+                APP_SECRET_PRESENT=$(printf '%s' "$SECRET_JSON" | \
+                  python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]["data"]; print("YES" if "app_secret" in d else "NO")')
+
+                unset SECRET_JSON
+
+                set -x
 
                 if [ "$MYSQL_USER_PRESENT" = "YES" ] && \
                    [ "$MYSQL_PASSWORD_PRESENT" = "YES" ] && \
-                   [ "$DOCKER_USERNAME_PRESENT" = "YES" ]; then
+                   [ "$DOCKER_USERNAME_PRESENT" = "YES" ] && \
+                   [ "$APP_SECRET_PRESENT" = "YES" ]; then
                     VAULT_RESULT="PASS"
                 else
                     VAULT_RESULT="FAIL"
@@ -891,12 +903,16 @@ stage('Production - Vault Secrets Check') {
     <td>docker_username</td>
     <td>${DOCKER_USERNAME_PRESENT}</td>
 </tr>
+<tr>
+    <td>app_secret</td>
+    <td>${APP_SECRET_PRESENT}</td>
+</tr>
 </table>
 
 <h2>Result</h2>
 <p><strong>${VAULT_RESULT}</strong></p>
 
-<p>No secret values are displayed in this report.</p>
+<p>No secret values are displayed in this report or Jenkins console.</p>
 
 </body>
 </html>
@@ -936,7 +952,6 @@ EOF
         }
     }
 }
-
 stage('Production - Docker Secrets Validation') {
     steps {
         sh '''
