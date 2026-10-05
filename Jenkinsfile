@@ -486,10 +486,34 @@ stage('Docker Compose Deploy') {
                 echo " DOCKER COMPOSE DEPLOY WITH VAULT SECRET"
                 echo "========================================="
 
-                mkdir -p secrets         
+                # --------------------------------------------------
+                # 1. Stopper les anciens conteneurs
+                # --------------------------------------------------
+                echo "Stopping previous Docker Compose deployment..."
+
+                docker compose down || true
+
+                # --------------------------------------------------
+                # 2. Préparer le dossier du secret
+                # --------------------------------------------------
+                mkdir -p secrets
+
+                # Nettoyage d'un ancien mauvais chemin éventuel
                 if [ -d secrets/app_secret.txt ]; then
-    rm -rf secrets/app_secret.txt
-fi
+                    echo "Removing invalid app_secret.txt directory..."
+                    rm -rf secrets/app_secret.txt
+                fi
+
+                # Supprimer l'ancien fichier maintenant que
+                # le conteneur qui l'utilisait est arrêté
+                rm -f secrets/app_secret.txt
+
+                # --------------------------------------------------
+                # 3. Récupérer le secret depuis Vault
+                #    sans afficher sa valeur dans Jenkins
+                # --------------------------------------------------
+                echo "Retrieving application secret from Vault..."
+
                 set +x
 
                 APP_SECRET=$(curl -fsS \
@@ -497,30 +521,82 @@ fi
                   http://127.0.0.1:8200/v1/secret/data/devops-pipeline \
                   | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["data"]["app_secret"])')
 
+                if [ -z "$APP_SECRET" ]; then
+                    echo "ERROR: app_secret could not be retrieved from Vault."
+                    exit 1
+                fi
+
                 printf '%s' "$APP_SECRET" > secrets/app_secret.txt
-                chmod 444 secrets/app_secret.txt
 
                 unset APP_SECRET
 
                 set -x
 
+                # Lecture seule pour le secret monté dans le conteneur
+                chmod 444 secrets/app_secret.txt
+
                 echo "Secret file prepared securely."
 
-                docker compose down
+                # --------------------------------------------------
+                # 4. Vérification locale sans afficher la valeur
+                # --------------------------------------------------
+                test -f secrets/app_secret.txt
+
+                SECRET_SIZE=$(stat -c "%s" secrets/app_secret.txt)
+
+                if [ "$SECRET_SIZE" -le 0 ]; then
+                    echo "ERROR: generated secret file is empty."
+                    exit 1
+                fi
+
+                echo "Secret file exists and is non-empty."
+
+                # --------------------------------------------------
+                # 5. Déploiement Docker Compose
+                # --------------------------------------------------
+                echo "Pulling Docker images..."
+
                 docker compose pull
+
+                echo "Starting Docker Compose deployment..."
+
                 docker compose up -d --force-recreate
 
+                echo "Docker Compose status:"
                 docker compose ps
 
+                # --------------------------------------------------
+                # 6. Vérification du montage Docker Secret
+                # --------------------------------------------------
                 echo "Checking Docker secret mount..."
 
-                docker compose exec -T app \
-                  test -f /run/secrets/app_secret
+                if ! docker compose exec -T app \
+                    test -f /run/secrets/app_secret; then
+
+                    echo "ERROR: /run/secrets/app_secret does not exist."
+                    exit 1
+                fi
+
+                if ! docker compose exec -T app \
+                    test -r /run/secrets/app_secret; then
+
+                    echo "ERROR: /run/secrets/app_secret is not readable."
+                    exit 1
+                fi
+
+                echo "Docker secret file information:"
 
                 docker compose exec -T app \
                   ls -l /run/secrets/app_secret
 
                 echo "Docker secret mounted successfully."
+
+                # IMPORTANT :
+                # On ne fait JAMAIS :
+                #
+                # cat /run/secrets/app_secret
+                #
+                # pour ne pas afficher le secret dans Jenkins.
             '''
         }
     }
