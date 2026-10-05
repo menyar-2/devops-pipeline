@@ -471,16 +471,59 @@ EOF
             }
         }
 
-        stage('Docker Compose Deploy') {
-            steps {
-                sh '''
-                    docker compose down || true
-                    docker compose pull
-                    docker compose up -d
-                    docker compose ps
-                '''
-            }
+stage('Docker Compose Deploy') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'vault-token',
+                variable: 'VAULT_TOKEN'
+            )
+        ]) {
+            sh '''
+                set -e
+
+                echo "========================================="
+                echo " DOCKER COMPOSE DEPLOY WITH VAULT SECRET"
+                echo "========================================="
+
+                mkdir -p secrets
+                chmod 700 secrets
+
+                set +x
+
+                APP_SECRET=$(curl -fsS \
+                  -H "X-Vault-Token: $VAULT_TOKEN" \
+                  http://127.0.0.1:8200/v1/secret/data/devops-pipeline \
+                  | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["data"]["app_secret"])')
+
+                printf '%s' "$APP_SECRET" > secrets/app_secret.txt
+                chmod 600 secrets/app_secret.txt
+
+                unset APP_SECRET
+
+                set -x
+
+                echo "Secret file prepared securely."
+
+                docker compose down
+                docker compose pull
+                docker compose up -d --force-recreate
+
+                docker compose ps
+
+                echo "Checking Docker secret mount..."
+
+                docker compose exec -T app \
+                  test -f /run/secrets/app_secret
+
+                docker compose exec -T app \
+                  ls -l /run/secrets/app_secret
+
+                echo "Docker secret mounted successfully."
+            '''
         }
+    }
+}
 stage('Infrastructure as Code - Ansible') {
     steps {
         sh '''
