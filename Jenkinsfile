@@ -486,8 +486,7 @@ stage('Docker Compose Deploy') {
                 echo " DOCKER COMPOSE DEPLOY WITH VAULT SECRET"
                 echo "========================================="
 
-                mkdir -p secrets
-                chmod 700 secrets
+                mkdir -p secrets         
 
                 set +x
 
