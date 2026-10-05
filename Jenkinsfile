@@ -1075,6 +1075,181 @@ EOF
     }
 }
 
+stage('Production - SIMP Server Hardening') {
+    steps {
+        sh '''
+            set -e
+
+            echo "========================================="
+            echo " PRODUCTION - SIMP SERVER HARDENING"
+            echo "========================================="
+
+            mkdir -p reports/simp
+
+            docker rm -f rocky-hardening-ci 2>/dev/null || true
+
+            docker run -dit \
+              --name rocky-hardening-ci \
+              --privileged \
+              rockylinux:9 \
+              /bin/bash
+
+            cleanup() {
+                docker rm -f rocky-hardening-ci 2>/dev/null || true
+            }
+
+            trap cleanup EXIT
+
+            echo "Installing Puppet inside Rocky Linux..."
+
+            docker exec rocky-hardening-ci \
+              dnf install -y https://yum.puppet.com/puppet8-release-el-9.noarch.rpm
+
+            docker exec rocky-hardening-ci \
+              dnf install -y puppet-agent procps-ng
+
+            docker exec rocky-hardening-ci \
+              mkdir -p /opt/hardening /etc/sysctl.d
+
+            docker cp \
+              puppet/server-hardening.pp \
+              rocky-hardening-ci:/opt/hardening/server-hardening.pp
+
+            echo "Applying Puppet hardening policy..."
+
+            docker exec rocky-hardening-ci \
+              /opt/puppetlabs/bin/puppet apply \
+              /opt/hardening/server-hardening.pp \
+              > reports/simp/puppet-output.txt 2>&1
+
+            IP_FORWARD=$(docker exec rocky-hardening-ci \
+              sysctl -n net.ipv4.ip_forward)
+
+            ACCEPT_REDIRECTS=$(docker exec rocky-hardening-ci \
+              sysctl -n net.ipv4.conf.all.accept_redirects)
+
+            SEND_REDIRECTS=$(docker exec rocky-hardening-ci \
+              sysctl -n net.ipv4.conf.all.send_redirects)
+
+            PASSWD_PERMS=$(docker exec rocky-hardening-ci \
+              stat -c "%a" /etc/passwd)
+
+            SHADOW_PERMS=$(docker exec rocky-hardening-ci \
+              stat -c "%a" /etc/shadow)
+
+            GROUP_PERMS=$(docker exec rocky-hardening-ci \
+              stat -c "%a" /etc/group)
+
+            if [ "$IP_FORWARD" = "0" ] && \
+               [ "$ACCEPT_REDIRECTS" = "0" ] && \
+               [ "$SEND_REDIRECTS" = "0" ] && \
+               [ "$PASSWD_PERMS" = "644" ] && \
+               [ "$SHADOW_PERMS" = "0" ] && \
+               [ "$GROUP_PERMS" = "644" ]; then
+                HARDENING_RESULT="PASS"
+            else
+                HARDENING_RESULT="FAIL"
+            fi
+
+            cat > reports/simp/simp-hardening-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SIMP / Puppet Server Hardening Report</title>
+</head>
+<body>
+
+<h1>SIMP / Puppet Server Hardening Report</h1>
+
+<p><strong>Phase:</strong> Production - Server Hardening</p>
+<p><strong>Platform:</strong> Rocky Linux 9</p>
+<p><strong>Tool:</strong> Puppet 8 / SIMP-style reduced hardening</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Hardening Controls</h2>
+
+<table border="1" cellpadding="8">
+<tr>
+    <th>Control</th>
+    <th>Value</th>
+</tr>
+
+<tr>
+    <td>IPv4 Forwarding</td>
+    <td>${IP_FORWARD}</td>
+</tr>
+
+<tr>
+    <td>Accept Redirects</td>
+    <td>${ACCEPT_REDIRECTS}</td>
+</tr>
+
+<tr>
+    <td>Send Redirects</td>
+    <td>${SEND_REDIRECTS}</td>
+</tr>
+
+<tr>
+    <td>/etc/passwd permissions</td>
+    <td>${PASSWD_PERMS}</td>
+</tr>
+
+<tr>
+    <td>/etc/shadow permissions</td>
+    <td>${SHADOW_PERMS}</td>
+</tr>
+
+<tr>
+    <td>/etc/group permissions</td>
+    <td>${GROUP_PERMS}</td>
+</tr>
+</table>
+
+<h2>Overall Result</h2>
+<p><strong>${HARDENING_RESULT}</strong></p>
+
+</body>
+</html>
+EOF
+
+            cp reports/simp/simp-hardening-report.html \
+               simp-hardening-report.html
+
+            cp reports/simp/puppet-output.txt \
+               simp-puppet-output.txt
+
+            echo "Generated SIMP/Puppet artifacts:"
+            ls -lh simp-hardening-report.html simp-puppet-output.txt
+
+            if [ "$HARDENING_RESULT" != "PASS" ]; then
+                echo "SIMP/Puppet hardening validation failed."
+                exit 1
+            fi
+
+            echo "SIMP/Puppet server hardening passed."
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'simp-hardening-report.html',
+                reportName: 'SIMP Server Hardening Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'simp-hardening-report.html,simp-puppet-output.txt',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
