@@ -1326,6 +1326,160 @@ EOF
         }
     }
 }
+
+stage('Production - OSQuery Configuration Safety Checks') {
+    steps {
+        sh '''
+            set -e
+
+            echo "========================================="
+            echo " PRODUCTION - OSQUERY CONFIGURATION CHECKS"
+            echo "========================================="
+
+            mkdir -p reports/osquery
+
+            echo "Checking OS version..."
+            OS_NAME=$(osqueryi --json \
+              "SELECT name FROM os_version;" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["name"] if d else "UNKNOWN")')
+
+            OS_VERSION=$(osqueryi --json \
+              "SELECT version FROM os_version;" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["version"] if d else "UNKNOWN")')
+
+            echo "Checking sensitive file permissions..."
+
+            PASSWD_MODE=$(osqueryi --json \
+              "SELECT mode FROM file WHERE path='/etc/passwd';" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["mode"] if d else "UNKNOWN")')
+
+            SHADOW_MODE=$(osqueryi --json \
+              "SELECT mode FROM file WHERE path='/etc/shadow';" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["mode"] if d else "UNKNOWN")')
+
+            GROUP_MODE=$(osqueryi --json \
+              "SELECT mode FROM file WHERE path='/etc/group';" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d[0]["mode"] if d else "UNKNOWN")')
+
+            echo "Checking important listening ports..."
+
+            PORTS=$(osqueryi --json \
+              "SELECT DISTINCT port FROM listening_ports WHERE port IN (8080,8081,8085,8200,9000,9090,3306);" \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(",".join(sorted([str(x["port"]) for x in d])))')
+
+            echo "Collecting full OSQuery output..."
+
+            {
+                echo "=== OS VERSION ==="
+                osqueryi "SELECT name, version FROM os_version;"
+
+                echo
+                echo "=== SENSITIVE FILE PERMISSIONS ==="
+                osqueryi "SELECT path, mode, uid, gid FROM file WHERE path IN ('/etc/passwd','/etc/shadow','/etc/group');"
+
+                echo
+                echo "=== LISTENING PORTS ==="
+                osqueryi "SELECT port, protocol, address, pid FROM listening_ports WHERE port > 0;"
+            } > reports/osquery/osquery-output.txt
+
+            if [ "$PASSWD_MODE" = "0644" ] && \
+               [ "$SHADOW_MODE" = "0640" ] && \
+               [ "$GROUP_MODE" = "0644" ]; then
+                OSQUERY_RESULT="PASS"
+            else
+                OSQUERY_RESULT="FAIL"
+            fi
+
+            cat > reports/osquery/osquery-security-report.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>OSQuery Configuration Safety Report</title>
+</head>
+<body>
+
+<h1>OSQuery Configuration Safety Report</h1>
+
+<p><strong>Phase:</strong> Production - Configuration Safety Checks</p>
+<p><strong>Tool:</strong> OSQuery</p>
+<p><strong>OS:</strong> ${OS_NAME} ${OS_VERSION}</p>
+<p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+<p><strong>Git Commit:</strong> ${GIT_COMMIT}</p>
+
+<h2>Security Controls</h2>
+
+<table border="1" cellpadding="8">
+<tr>
+    <th>Check</th>
+    <th>Value</th>
+</tr>
+
+<tr>
+    <td>/etc/passwd permissions</td>
+    <td>${PASSWD_MODE}</td>
+</tr>
+
+<tr>
+    <td>/etc/shadow permissions</td>
+    <td>${SHADOW_MODE}</td>
+</tr>
+
+<tr>
+    <td>/etc/group permissions</td>
+    <td>${GROUP_MODE}</td>
+</tr>
+
+<tr>
+    <td>Observed important listening ports</td>
+    <td>${PORTS}</td>
+</tr>
+
+</table>
+
+<h2>Overall Result</h2>
+<p><strong>${OSQUERY_RESULT}</strong></p>
+
+</body>
+</html>
+EOF
+
+            cp reports/osquery/osquery-security-report.html \
+               osquery-security-report.html
+
+            cp reports/osquery/osquery-output.txt \
+               osquery-output.txt
+
+            echo "Generated OSQuery artifacts:"
+            ls -lh osquery-security-report.html osquery-output.txt
+
+            if [ "$OSQUERY_RESULT" != "PASS" ]; then
+                echo "OSQuery configuration safety checks failed."
+                exit 1
+            fi
+
+            echo "OSQuery configuration safety checks passed."
+        '''
+    }
+
+    post {
+        always {
+            publishHTML(target: [
+                reportDir: '.',
+                reportFiles: 'osquery-security-report.html',
+                reportName: 'OSQuery Configuration Safety Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: false
+            ])
+
+            archiveArtifacts(
+                artifacts: 'osquery-security-report.html,osquery-output.txt',
+                allowEmptyArchive: false
+            )
+        }
+    }
+}
 stage('Security Scanning - SQLMap') {
     steps {
         sh '''
